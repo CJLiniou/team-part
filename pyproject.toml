@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-team"
+version = "0.1.0"
+description = "轻量级多智能体编排框架，每个 Agent 由 LLM 驱动，支持自主推理、工具调用和智能体间通信"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Agent Team Contributors"}
+]
+dependencies = [
+    "anthropic>=0.40.0",
+    "filelock>=3.13.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+openai = [
+    "openai>=1.50.0",
+]
+
+[project.scripts]
+agent-team = "agent_team.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

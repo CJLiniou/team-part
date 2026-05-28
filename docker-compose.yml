@@ -1,0 +1,21 @@
+version: '3.9'
+services:
+  agent-team:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agent-team:latest
+    container_name: agent-team
+    environment:
+      AGENT_TEAM_TEAM_NAME: agent-team
+      AGENT_TEAM_DB_PATH: /data/team.db
+      AGENT_TEAM_LOG_LEVEL: INFO
+      AGENT_TEAM_MAX_CONCURRENT_TASKS: 5
+    volumes:
+      - agent_team_data:/data
+    stdin_open: true
+    tty: true
+    command: ["python", "-m", "agent_team"]
+
+volumes:
+  agent_team_data:
