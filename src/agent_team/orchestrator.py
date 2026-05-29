@@ -437,7 +437,8 @@ Do NOT output anything else. Start your response with APPROVE or REJECT."""
     def spawn_llm_agent(self, agent_id: str, model: str = "claude-sonnet-4-6",
                         system_prompt_extra: str = "",
                         require_plan_approval: bool = False,
-                        provider=None) -> asyncio.Task:
+                        provider=None,
+                        extra_body: dict | None = None) -> asyncio.Task:
         if agent_id not in self.agents:
             raise ValueError(f"Agent {agent_id} not registered")
 
@@ -469,6 +470,7 @@ Do NOT output anything else. Start your response with APPROVE or REJECT."""
             hook_registry=self.hook_registry,
             provider=provider,
             console=self.console,
+            extra_body=extra_body,
         )
 
         task = asyncio.create_task(
@@ -485,7 +487,8 @@ Do NOT output anything else. Start your response with APPROVE or REJECT."""
                            poll_interval: float = 5.0,
                            require_plan_approval: bool = False,
                            plan_review_criteria: Optional[str] = None,
-                           provider=None) -> None:
+                           provider=None,
+                           extra_body: dict | None = None) -> None:
         """以 LLM 模式运行所有 agent。
 
         Args:
@@ -504,7 +507,7 @@ Do NOT output anything else. Start your response with APPROVE or REJECT."""
         for agent_id in self.agents:
             self.spawn_llm_agent(agent_id, model=model,
                                 require_plan_approval=require_plan_approval,
-                                provider=provider)
+                                provider=provider, extra_body=extra_body)
 
         # 配置计划审查策略
         if not require_plan_approval:
@@ -842,8 +845,9 @@ Do NOT output anything else. Start your response with APPROVE or REJECT."""
         for state in AgentState:
             agents_by_state[state.value] = len(self.list_agents(state=state))
 
-        total_completed = sum(a.completed_tasks for a in self.agents.values())
-        total_failed = sum(a.failed_tasks for a in self.agents.values())
+        task_stats = self.task_manager.get_task_stats()
+        total_completed = task_stats.get('completed', 0)
+        total_failed = task_stats.get('failed', 0)
 
         token_summary = self.token_tracker.team_summary()
 
@@ -853,7 +857,7 @@ Do NOT output anything else. Start your response with APPROVE or REJECT."""
             'agents_by_state': agents_by_state,
             'total_completed_tasks': total_completed,
             'total_failed_tasks': total_failed,
-            'task_stats': self.task_manager.get_task_stats(),
+            'task_stats': task_stats,
             'results_recorded': len(self.results),
             'token_usage': token_summary,
         }

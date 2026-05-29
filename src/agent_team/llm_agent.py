@@ -100,10 +100,12 @@ class LLMAgent:
         hook_registry=None,
         provider=None,
         console=None,
+        extra_body=None,
     ):
         self.agent = agent
         self.provider = provider  # LLMProvider instance
         self.console = console
+        self.extra_body = extra_body  # 模型特定参数，如 {"enable_thinking": False}
         self.tool_registry = tool_registry
         self.task_manager = task_manager
         self.mailbox = mailbox
@@ -360,6 +362,7 @@ class LLMAgent:
             messages=messages,
             tools=tools or None,
             max_tokens=4096,
+            extra_body=self.extra_body,
         )
 
         # 记录 token 用量
@@ -416,6 +419,7 @@ class LLMAgent:
                     messages=messages,
                     tools=tools or None,
                     max_tokens=4096,
+                    extra_body=self.extra_body,
                 )
 
                 if self.token_tracker:

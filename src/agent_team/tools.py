@@ -366,6 +366,9 @@ def create_default_registry(task_manager, mailbox, agents_dict,
 
     # ── respond_to_shutdown ──
     def _respond_to_shutdown(accept: bool, reason: str) -> str:
+        # 防止 LLM 重复调用 — 只记录第一次响应
+        if _respond_to_shutdown._response is not None:
+            return "Shutdown response already recorded."
         _respond_to_shutdown._response = (accept, reason)
         if accept:
             return f"Shutdown accepted: {reason}"

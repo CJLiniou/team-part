@@ -67,8 +67,9 @@ class LLMProvider(ABC):
         messages: list[dict],
         tools: Optional[list[dict]] = None,
         max_tokens: int = 4096,
+        extra_body: Optional[dict] = None,
     ) -> LLMResponse:
-        ...
+        """extra_body: 模型特定参数，如 Qwen3 的 enable_thinking=False"""
 
 
 # ── Anthropic provider ───────────────────────────────────────────────
@@ -107,21 +108,26 @@ class AnthropicProvider(LLMProvider):
         messages: list[dict] | None = None,
         tools: list[dict] | None = None,
         max_tokens: int = 4096,
+        extra_body: dict | None = None,
     ) -> LLMResponse:
         if self._semaphore:
             async with self._semaphore:
-                return await self._do_create_message(model, system_prompt, messages, tools, max_tokens)
-        return await self._do_create_message(model, system_prompt, messages, tools, max_tokens)
+                return await self._do_create_message(model, system_prompt, messages, tools, max_tokens, extra_body)
+        return await self._do_create_message(model, system_prompt, messages, tools, max_tokens, extra_body)
 
-    async def _do_create_message(self, model, system_prompt, messages, tools, max_tokens):
+    async def _do_create_message(self, model, system_prompt, messages, tools, max_tokens, extra_body):
         client = self._get_client()
-        resp = await client.messages.create(
-            model=model or self.default_model,
-            system=system_prompt,
-            messages=messages or [],
-            tools=tools or None,
-            max_tokens=max_tokens,
-        )
+        kwargs = {
+            "model": model or self.default_model,
+            "system": system_prompt,
+            "messages": messages or [],
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            kwargs["tools"] = tools
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        resp = await client.messages.create(**kwargs)
         return self._to_unified(resp)
 
     @staticmethod
@@ -181,13 +187,14 @@ class OpenAIProvider(LLMProvider):
         messages: list[dict] | None = None,
         tools: list[dict] | None = None,
         max_tokens: int = 4096,
+        extra_body: dict | None = None,
     ) -> LLMResponse:
         if self._semaphore:
             async with self._semaphore:
-                return await self._do_create_message(model, system_prompt, messages, tools, max_tokens)
-        return await self._do_create_message(model, system_prompt, messages, tools, max_tokens)
+                return await self._do_create_message(model, system_prompt, messages, tools, max_tokens, extra_body)
+        return await self._do_create_message(model, system_prompt, messages, tools, max_tokens, extra_body)
 
-    async def _do_create_message(self, model, system_prompt, messages, tools, max_tokens):
+    async def _do_create_message(self, model, system_prompt, messages, tools, max_tokens, extra_body):
         client = self._get_client()
 
         # 构建 OpenAI 格式的消息列表
@@ -202,12 +209,25 @@ class OpenAIProvider(LLMProvider):
         if tools:
             openai_tools = [self._convert_tool_schema(t) for t in tools]
 
-        resp = await client.chat.completions.create(
-            model=model or self.default_model,
-            messages=openai_messages,
-            tools=openai_tools or None,
-            max_tokens=max_tokens,
-        )
+        effective_model = model or self.default_model
+
+        # Qwen3 系列默认关掉 thinking（非流式调用要求）
+        merged_extra = dict(extra_body) if extra_body else {}
+        if effective_model.lower().startswith("qwen3") and "enable_thinking" not in merged_extra:
+            merged_extra["enable_thinking"] = False
+
+        kwargs = {
+            "model": effective_model,
+            "messages": openai_messages,
+            "max_tokens": max_tokens,
+        }
+        if openai_tools:
+            kwargs["tools"] = openai_tools
+        if merged_extra:
+            kwargs["extra_body"] = merged_extra
+
+        logger.debug(f"OpenAI request: model={effective_model}, extra_body={merged_extra}")
+        resp = await client.chat.completions.create(**kwargs)
         return self._to_unified(resp)
 
     @staticmethod

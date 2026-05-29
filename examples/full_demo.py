@@ -217,7 +217,7 @@ async def run_callback_mode():
 
 # ── LLM mode demo ─────────────────────────────────────────────────────
 
-async def run_llm_mode(with_plan: bool = False, provider=None):
+async def run_llm_mode(with_plan: bool = False, provider=None, extra_body=None):
     """LLM 驱动模式。provider 由 main() 根据命令行参数创建。"""
     print("\n" + "=" * 60)
     print(f"LLM MODE DEMO (plan_approval={with_plan})")
@@ -267,7 +267,8 @@ async def run_llm_mode(with_plan: bool = False, provider=None):
         # 启动单个 agent
         orch.spawn_llm_agent("temp-agent",
                             model=provider.default_model,
-                            provider=provider)
+                            provider=provider,
+                            extra_body=extra_body)
         await asyncio.sleep(3)  # Let it start
 
         # 协商关闭
@@ -299,6 +300,7 @@ async def run_llm_mode(with_plan: bool = False, provider=None):
                 require_plan_approval=with_plan,
                 plan_review_criteria=plan_criteria,
                 provider=provider,
+                extra_body=extra_body,
             ),
             timeout=600,
         )
@@ -322,8 +324,9 @@ async def run_llm_mode(with_plan: bool = False, provider=None):
     all_msgs = orch.mailbox.receive("Developer", unread_only=False, limit=100)
     print(f"\n    Mailbox messages exchanged: {len(all_msgs)}")
 
-    # 清理临时目录
-    shutil.rmtree(tmpdir, ignore_errors=True)
+    # 清理
+    # print(f"\n  Output files: {tmpdir}")
+    shutil.rmtree(tmpdir, ignore_errors=True)  # 保留文件供检查
 
     print(f"\n  LLM mode: DEMO COMPLETE")
 
@@ -345,7 +348,9 @@ async def main():
                        choices=["anthropic", "openai"],
                        help="Provider type (default: from AGENT_TEAM_PROVIDER env, fallback anthropic)")
     parser.add_argument("--max-concurrent", type=int, default=0,
-                       help="Max concurrent LLM requests (0=unlimited, 1-2 for low-QPS APIs like DashScope free tier)")
+                       help="Max concurrent LLM requests (0=unlimited, 1-2 for low-QPS APIs)")
+    parser.add_argument("--extra-body", type=str, default="",
+                       help='Model-specific extra params as JSON, e.g. \'{"enable_thinking":false}\'')
     args = parser.parse_args()
 
     print("\n" + "=" * 60)
@@ -382,11 +387,35 @@ async def main():
                 max_concurrent=max_cc,
             )
 
+        extra_body = None
+        if args.extra_body:
+            try:
+                import json as _json
+                extra_body = _json.loads(args.extra_body)
+            except Exception:
+                # 也支持 key=value 格式: "enable_thinking=false"
+                extra_body = {}
+                for pair in args.extra_body.split(","):
+                    k, _, v = pair.partition("=")
+                    if k and v:
+                        v_lower = v.strip().lower()
+                        if v_lower == "false":
+                            extra_body[k.strip()] = False
+                        elif v_lower == "true":
+                            extra_body[k.strip()] = True
+                        elif v_lower.isdigit():
+                            extra_body[k.strip()] = int(v_lower)
+                        else:
+                            extra_body[k.strip()] = v.strip()
+
         print(f"  Provider: {ptype} | Model: {provider.default_model}")
         if provider.base_url:
             print(f"  Base URL: {provider.base_url}")
+        if extra_body:
+            print(f"  Extra body: {extra_body}")
 
-        await run_llm_mode(with_plan=args.plan, provider=provider)
+        await run_llm_mode(with_plan=args.plan, provider=provider,
+                           extra_body=extra_body)
 
     print("\n" + "=" * 60)
     print("DEMO COMPLETE")
